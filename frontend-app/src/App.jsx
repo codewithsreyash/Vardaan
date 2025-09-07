@@ -1,7 +1,7 @@
 import { Routes, Route, Navigate, useLocation } from "react-router-dom";
 import { AuthProvider, useAuth } from "./context/AuthContext";
 import { UIProvider } from "./context/UIContext";
-
+import Onboarding from "./pages/Onboarding";
 import Login from "./pages/Auth/Login";
 import Register from "./pages/Auth/Register";
 import Home from "./pages/Home";
@@ -9,6 +9,7 @@ import AddReport from "./pages/AddReport";
 import MyReports from "./pages/MyReports";
 import Leaderboard from "./pages/Leaderboard";
 import TrackReport from "./pages/TrackReport";
+import TrackReportDetails from "./pages/TrackReportDetails";
 import TradePlastic from "./pages/TradePlastic";
 import Suggestions from "./pages/Suggestions";
 import Profile from "./pages/Profile";
@@ -30,10 +31,6 @@ function ProtectedRoute({ children }) {
   return children;
 }
 
-/**
- * Redirect authenticated users away from /login and /register
- * so after login they go to Home
- */
 function AuthRedirect({ children }) {
   const { user, loading } = useAuth();
 
@@ -51,11 +48,16 @@ function AuthRedirect({ children }) {
 }
 
 export default function App() {
+  const hasSeenOnboarding = localStorage.getItem("seenOnboarding");
+
   return (
     <AuthProvider>
       <UIProvider>
         <Routes>
-          {/* Public routes */}
+          {/* Onboarding */}
+          <Route path="/welcome" element={<Onboarding />} />
+
+          {/* Auth */}
           <Route
             path="/login"
             element={
@@ -73,7 +75,7 @@ export default function App() {
             }
           />
 
-          {/* Protected routes */}
+          {/* Protected */}
           <Route
             path="/"
             element={
@@ -107,10 +109,18 @@ export default function App() {
             }
           />
           <Route
-            path="/track-report/:id?"
+            path="/track-report"
             element={
               <ProtectedRoute>
                 <TrackReport />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/track-report/:id"
+            element={
+              <ProtectedRoute>
+                <TrackReportDetails />
               </ProtectedRoute>
             }
           />
@@ -140,7 +150,16 @@ export default function App() {
           />
 
           {/* Catch-all */}
-          <Route path="*" element={<Navigate to="/" replace />} />
+          <Route
+            path="*"
+            element={
+              hasSeenOnboarding ? (
+                <Navigate to="/login" replace />
+              ) : (
+                <Navigate to="/welcome" replace />
+              )
+            }
+          />
         </Routes>
       </UIProvider>
     </AuthProvider>
