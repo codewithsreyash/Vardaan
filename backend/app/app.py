@@ -1,4 +1,3 @@
-# app/app.py
 from flask import Flask
 from flask_cors import CORS
 from .config import Config
@@ -8,13 +7,17 @@ def create_app():
     app = Flask(__name__)
     app.config.from_object(Config)
 
-    # CORS for local dev frontends (allow all origins during dev)
-    CORS(app, resources={r"/api/*": {"origins": "*"}}, supports_credentials=True)
+    # Allow CORS for frontend at localhost:5173
+    CORS(
+        app,
+        resources={r"/api/*": {"origins": ["http://localhost:5173"]}},
+        supports_credentials=True,
+        methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+        allow_headers=["Content-Type", "Authorization"]
+    )
 
-    # init DB connection helpers
     init_db(app)
 
-    # register blueprints
     from .routes.auth import auth_bp
     from .routes.report import report_bp
     from .routes.trade import trade_bp
