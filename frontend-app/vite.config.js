@@ -1,24 +1,22 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
-import tailwindcss from 'tailwindcss'
 import { VitePWA } from 'vite-plugin-pwa'
 
 // https://vitejs.dev/config/
 export default defineConfig({
   plugins: [
-    tailwindcss(),
     react(),
     VitePWA({
-      registerType: 'autoUpdate', // keeps SW always updated
-      injectRegister: 'auto', // injects in index.html automatically
-
+      registerType: 'autoUpdate',
+      injectRegister: 'auto',
+      
       includeAssets: [
         'favicon.svg',
         'favicon.ico',
         'apple-touch-icon.png',
         'masked-icon.png'
       ],
-
+      
       manifest: {
         name: 'Civic Reporter App',
         short_name: 'CivicApp',
@@ -48,19 +46,23 @@ export default defineConfig({
           }
         ]
       },
-
+      
       workbox: {
         globPatterns: ['**/*.{js,css,html,ico,png,svg}'],
         cleanupOutdatedCaches: true,
         clientsClaim: true,
         skipWaiting: true
       },
-
+      
       devOptions: {
         enabled: true,
         navigateFallback: 'index.html',
         suppressWarnings: true
       }
     })
-  ]
+  ],
+  server: {
+    port: 5173,
+    host: true
+  }
 })
