@@ -1,119 +1,250 @@
-import { useEffect, useState } from "react";
-import AppShell from "../components/AppShell";
-import { useNavigate } from "react-router-dom";
-import api from "../services/api";
+import { useState, useEffect } from "react";
+import { useNavigate, useSearchParams } from "react-router-dom";
+import { MapContainer, TileLayer, Marker } from "react-leaflet";
+import "leaflet/dist/leaflet.css";
+import L from "leaflet";
+import { ArrowLeft, Camera } from "lucide-react";
+import { useAuth } from "../context/AuthContext";
+
+// Fix leaflet marker icons
+delete L.Icon.Default.prototype._getIconUrl;
+L.Icon.Default.mergeOptions({
+  iconRetinaUrl:
+    "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon-2x.png",
+  iconUrl:
+    "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon.png",
+  shadowUrl:
+    "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png",
+});
 
 export default function AddReport() {
-  const nav = useNavigate();
-  const [form, setForm] = useState({
-    category: "pothole",
-    description: "",
-    photo_url: "",
-    location_lat: null,
-    location_lng: null,
-  });
-  const [loading, setLoading] = useState(false);
+  const navigate = useNavigate();
+  const { user } = useAuth();
+  const [searchParams] = useSearchParams();
 
+  const [title, setTitle] = useState("");
+  const [desc, setDesc] = useState("");
+  const [category, setCategory] = useState(""); // will be set after fetching categories
+  const [categories, setCategories] = useState([]);
+  const [suggestion, setSuggestion] = useState("");
+  const [location, setLocation] = useState([18.5204, 73.8567]); // default Pune
+  const [address, setAddress] = useState("Fetching address...");
+  const [image, setImage] = useState(null);
+
+  // ✅ Fetch categories from backend
   useEffect(() => {
-    if (navigator.geolocation) {
-      navigator.geolocation.getCurrentPosition(
-        (pos) =>
-          setForm((f) => ({
-            ...f,
-            location_lat: pos.coords.latitude,
-            location_lng: pos.coords.longitude,
-          })),
-        () => {}
-      );
-    }
+    fetch("http://localhost:5000/api/reports/categories")
+      .then((res) => res.json())
+      .then((data) => {
+        setCategories(data || []);
+        if (data?.length) setCategory(data[0]); // default to first category
+      })
+      .catch(() => {
+        setCategories(["garbage", "streetlight", "pothole", "other"]); // fallback
+        setCategory("garbage");
+      });
   }, []);
 
-  const submit = async (e) => {
+  // ✅ Fetch live location + reverse geocode
+  useEffect(() => {
+    const trendingTitle = searchParams.get("title");
+    if (trendingTitle) setTitle(trendingTitle);
+
+    if (navigator.geolocation) {
+      navigator.geolocation.watchPosition(
+        (pos) => {
+          const newLoc = [pos.coords.latitude, pos.coords.longitude];
+          setLocation(newLoc);
+
+          // Reverse geocoding
+          fetch(
+            `https://nominatim.openstreetmap.org/reverse?format=json&lat=${newLoc[0]}&lon=${newLoc[1]}`
+          )
+            .then((res) => res.json())
+            .then((data) => {
+              setAddress(data?.display_name || "Address not available");
+            })
+            .catch(() => setAddress("Address not available"));
+        },
+        (err) => console.error("Location error:", err),
+        { enableHighAccuracy: true, timeout: 10000 }
+      );
+    }
+  }, [searchParams]);
+
+  // ✅ Capture image
+  const handleImageChange = (e) => {
+    const file = e.target.files[0];
+    if (file) setImage(file);
+  };
+
+  // ✅ Submit Report
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    setLoading(true);
+
+    if (!user?.token) {
+      alert("You must be logged in to submit a report");
+      return;
+    }
+
+    const formData = new FormData();
+    formData.append("title", title);
+    formData.append("description", desc);
+    formData.append("category", category);
+    formData.append("latitude", location[0]);
+    formData.append("longitude", location[1]);
+    formData.append("address", address || "Unknown address");
+    if (suggestion) formData.append("suggestion", suggestion);
+    if (image) formData.append("image", image);
+
     try {
-      await api.post("/reports", form);
-      nav("/my-reports", { replace: true });
-    } finally {
-      setLoading(false);
+      const res = await fetch("http://localhost:5000/api/reports", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${user?.token}`, // ✅ backend JWT
+        },
+        body: formData,
+      });
+
+      if (!res.ok) throw new Error("Failed to submit report");
+
+      navigate("/my-reports");
+    } catch (err) {
+      console.error("Report error:", err);
+      alert("Error submitting report. Please try again.");
     }
   };
 
   return (
-    <AppShell title="New Report" showFab={false}>
-      <div className="rounded-3xl overflow-hidden bg-white/5 border border-white/10">
-        <div className="aspect-[16/9] relative">
-          <img
-            src={
-              form.photo_url ||
-              "https://images.unsplash.com/photo-1529070538774-1843cb3265df?q=80&w=1200&auto=format&fit=crop"
-            }
-            className="w-full h-full object-cover"
-            alt=""
+    <div className="flex flex-col h-screen bg-gray-50">
+      {/* Header */}
+      <header className="flex items-center p-4 border-b bg-white">
+        <button onClick={() => navigate(-1)} className="mr-2">
+          <ArrowLeft className="w-6 h-6" />
+        </button>
+        <h1 className="text-lg font-semibold">Report Issue</h1>
+      </header>
+
+      {/* Map */}
+      <div className="h-56 w-full">
+        <MapContainer
+          center={location}
+          zoom={15}
+          className="h-full w-full rounded-lg shadow"
+        >
+          <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
+          <Marker position={location}></Marker>
+        </MapContainer>
+      </div>
+
+      {/* Address */}
+      <div className="p-4">
+        <p className="text-sm text-gray-700">📍 {address}</p>
+      </div>
+
+      {/* Form */}
+      <form
+        onSubmit={handleSubmit}
+        id="report-form"
+        className="flex-1 overflow-y-auto p-4 space-y-4"
+      >
+        <div>
+          <label className="block text-sm font-medium">Issue Title</label>
+          <input
+            type="text"
+            placeholder="e.g. Broken Streetlight"
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            className="w-full mt-1 p-3 border rounded-lg focus:ring focus:ring-green-200"
+            required
           />
-          <div className="absolute inset-0 grid place-items-center bg-black/30">
-            <label className="px-4 py-2 rounded-xl bg-white/10 border border-white/20 cursor-pointer">
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium">Description</label>
+          <textarea
+            placeholder="Provide a detailed description of the issue."
+            value={desc}
+            onChange={(e) => setDesc(e.target.value)}
+            rows={3}
+            className="w-full mt-1 p-3 border rounded-lg focus:ring focus:ring-green-200"
+            required
+          />
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium">Category</label>
+          <select
+            value={category}
+            onChange={(e) => setCategory(e.target.value)}
+            className="w-full mt-1 p-3 border rounded-lg focus:ring focus:ring-green-200"
+          >
+            {categories.map((c) => (
+              <option key={c} value={c}>
+                {c.charAt(0).toUpperCase() + c.slice(1)}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium">
+            Suggestion (Optional)
+          </label>
+          <textarea
+            placeholder="Suggest an improvement..."
+            value={suggestion}
+            onChange={(e) => setSuggestion(e.target.value)}
+            rows={2}
+            className="w-full mt-1 p-3 border rounded-lg focus:ring focus:ring-green-200"
+          />
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium mb-1">Capture Photo</label>
+          <div className="flex gap-4">
+            {image ? (
+              <img
+                src={URL.createObjectURL(image)}
+                alt="preview"
+                className="w-20 h-20 object-cover rounded-lg border"
+              />
+            ) : (
+              <div className="w-20 h-20 flex items-center justify-center border rounded-lg text-gray-400">
+                <Camera />
+              </div>
+            )}
+            <label className="w-24 h-20 flex items-center justify-center border rounded-lg cursor-pointer bg-gray-100 hover:bg-gray-200">
               <input
                 type="file"
                 accept="image/*"
+                capture="environment"
+                onChange={handleImageChange}
                 className="hidden"
-                onChange={fileToDataUrl((url) =>
-                  setForm((f) => ({ ...f, photo_url: url }))
-                )}
               />
-              Upload Photo
+              <span className="text-xs text-gray-600">Open Camera</span>
             </label>
           </div>
         </div>
-        <form onSubmit={submit} className="p-4 space-y-4">
-          <div className="bg-black/20 rounded-2xl p-3 border border-white/10">
-            <label className="text-white/70 text-sm">Category</label>
-            <select
-              value={form.category}
-              onChange={(e) => setForm({ ...form, category: e.target.value })}
-              className="mt-2 w-full bg-white/5 border border-white/10 rounded-xl h-11 px-3 outline-none"
-            >
-              <option value="pothole">Pothole</option>
-              <option value="streetlight">Streetlight</option>
-              <option value="garbage">Garbage</option>
-              <option value="other">Other</option>
-            </select>
-          </div>
+      </form>
 
-          <div className="bg-black/20 rounded-2xl p-3 border border-white/10">
-            <label className="text-white/70 text-sm">Describe the issue</label>
-            <textarea
-              value={form.description}
-              onChange={(e) => setForm({ ...form, description: e.target.value })}
-              rows={5}
-              className="mt-2 w-full bg-white/5 border border-white/10 rounded-xl p-3 outline-none resize-none"
-              placeholder="Add more details…"
-            />
-            <div className="mt-3 text-sm text-white/60">
-              {form.location_lat
-                ? "Auto-tagged with current location"
-                : "Location will be auto-tagged if allowed"}
-            </div>
-          </div>
-
-          <button
-            disabled={loading}
-            className="w-full h-12 rounded-2xl bg-red-600 font-semibold disabled:opacity-60"
-          >
-            {loading ? "Submitting…" : "Submit Report"}
-          </button>
-        </form>
+      {/* Footer */}
+      <div className="flex gap-4 p-4 border-t bg-white">
+        <button
+          type="button"
+          onClick={() => navigate(-1)}
+          className="flex-1 py-3 rounded-lg border text-gray-700 hover:bg-gray-100"
+        >
+          Cancel
+        </button>
+        <button
+          type="submit"
+          form="report-form"
+          className="flex-1 py-3 rounded-lg bg-green-500 text-white font-medium hover:bg-green-600"
+        >
+          Submit Report
+        </button>
       </div>
-    </AppShell>
+    </div>
   );
-}
-
-function fileToDataUrl(cb) {
-  return (e) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = () => cb(reader.result);
-    reader.readAsDataURL(file);
-  };
 }
