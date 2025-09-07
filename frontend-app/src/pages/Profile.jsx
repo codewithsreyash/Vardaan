@@ -1,47 +1,62 @@
-import { useState } from "react";
 import AppShell from "../components/AppShell";
-import { useAuth } from "../context/AuthContext";
+import { ChevronRight } from "lucide-react";
+import { Link } from "react-router-dom";
 
-export default function Profile(){
-  const { user } = useAuth();
-  const [form, setForm] = useState({
-    name: user?.name || "",
-    email: user?.email || "",
-    phone: "",
-    address: ""
-  });
+const settings = [
+  { label: "Profile", path: "/profile" },
+  { label: "Notifications", path: "/settings/notifications" },
+  { label: "Privacy", path: "/settings/privacy" },
+  { label: "Language", path: "/settings/language", value: "English" },
+  { label: "Linked Accounts", path: "/settings/linked-accounts" },
+];
 
+const general = [
+  { label: "App Version", value: "1.2.3" },
+  { label: "Help & Support", path: "/settings/help" },
+  { label: "Terms of Service", path: "/settings/terms" },
+  { label: "Privacy Policy", path: "/settings/policy" },
+];
+
+export default function Settings() {
   return (
-    <AppShell title="User Profile" showFab={false}>
-      <div className="rounded-2xl bg-white/5 border border-white/10 p-4">
-        <div className="flex items-center gap-4">
-          <div className="w-16 h-16 rounded-full bg-white/10 grid place-items-center text-xl font-bold">
-            {user?.name?.[0]?.toUpperCase() || "U"}
-          </div>
-          <div>
-            <div className="text-lg font-semibold">{form.name}</div>
-            <div className="text-white/60 text-sm">User ID: {user?.id}</div>
-          </div>
+    <AppShell title="Settings" showFab={false}>
+      <div className="divide-y divide-gray-200">
+        {/* Account Section */}
+        <div className="py-3">
+          <h2 className="px-4 text-xs font-semibold text-gray-500 mb-2">ACCOUNT</h2>
+          {settings.map((s, i) => (
+            <Link
+              key={i}
+              to={s.path || "#"}
+              className="flex items-center justify-between px-4 py-3 hover:bg-gray-50"
+            >
+              <span>{s.label}</span>
+              <span className="flex items-center text-gray-400 text-sm">
+                {s.value && <span className="mr-1">{s.value}</span>}
+                <ChevronRight size={18} />
+              </span>
+            </Link>
+          ))}
         </div>
 
-        <div className="mt-5 space-y-3">
-          <Input label="Name" value={form.name} onChange={(v)=>setForm({...form,name:v})}/>
-          <Input label="Email" value={form.email} onChange={(v)=>setForm({...form,email:v})}/>
-          <Input label="Phone" value={form.phone} onChange={(v)=>setForm({...form,phone:v})}/>
-          <Input label="Address" value={form.address} onChange={(v)=>setForm({...form,address:v})}/>
-          <button className="w-full h-11 rounded-xl bg-[#2F6DEB] font-semibold">Save Changes</button>
+        {/* General Section */}
+        <div className="py-3">
+          <h2 className="px-4 text-xs font-semibold text-gray-500 mb-2">GENERAL</h2>
+          {general.map((s, i) => (
+            <Link
+              key={i}
+              to={s.path || "#"}
+              className="flex items-center justify-between px-4 py-3 hover:bg-gray-50"
+            >
+              <span>{s.label}</span>
+              <span className="flex items-center text-gray-400 text-sm">
+                {s.value && <span className="mr-1">{s.value}</span>}
+                {s.path && <ChevronRight size={18} />}
+              </span>
+            </Link>
+          ))}
         </div>
       </div>
     </AppShell>
-  );
-}
-
-function Input({label,value,onChange}){
-  return (
-    <label className="block">
-      <span className="text-white/70 text-sm">{label}</span>
-      <input value={value} onChange={(e)=>onChange(e.target.value)}
-             className="mt-1 w-full h-11 rounded-xl bg-white/5 border border-white/10 px-3 outline-none" />
-    </label>
   );
 }
