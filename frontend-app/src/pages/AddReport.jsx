@@ -32,45 +32,110 @@ export default function AddReport() {
   const [image, setImage] = useState(null);
 
   // ✅ Fetch categories from backend
-  useEffect(() => {
-    fetch("http://localhost:5000/api/reports/categories")
-      .then((res) => res.json())
-      .then((data) => {
-        setCategories(data || []);
-        if (data?.length) setCategory(data[0]); // default to first category
-      })
-      .catch(() => {
-        setCategories(["garbage", "streetlight", "pothole", "other"]); // fallback
-        setCategory("garbage");
-      });
-  }, []);
+  // ✅ Fetch categories
+useEffect(() => {
+  fetch("http://localhost:5000/api/reports/categories")
+    .then((res) => res.json())
+    .then((data) => {
+      setCategories(data || []);
+      if (data?.length) setCategory(data[0]); // default to first category
+    })
+    .catch((error) => {
+      console.error("Failed to fetch categories:", error);
+      setCategories(["garbage", "streetlight", "pothole", "other"]); // fallback
+      setCategory("garbage");
+    });
+}, []);
 
-  // ✅ Fetch live location + reverse geocode
-  useEffect(() => {
-    const trendingTitle = searchParams.get("title");
-    if (trendingTitle) setTitle(trendingTitle);
+// ✅ Fetch live location + reverse geocode
+useEffect(() => {
+  const trendingTitle = searchParams.get("title");
+  if (trendingTitle) setTitle(trendingTitle);
 
-    if (navigator.geolocation) {
-      navigator.geolocation.watchPosition(
-        (pos) => {
-          const newLoc = [pos.coords.latitude, pos.coords.longitude];
-          setLocation(newLoc);
+  let watchId;
+  let timeoutId;
+  let lastFetchTime = 0; // Keep this here but be aware of scope
+  let isActive = true; // Add flag to prevent state updates after cleanup
+  const MIN_FETCH_INTERVAL = 2000; // 2 seconds between API calls
 
-          // Reverse geocoding
-          fetch(
-            `https://nominatim.openstreetmap.org/reverse?format=json&lat=${newLoc[0]}&lon=${newLoc[1]}`
-          )
-            .then((res) => res.json())
-            .then((data) => {
+  if (navigator.geolocation) {
+    watchId = navigator.geolocation.watchPosition(
+      (pos) => {
+        if (!isActive) return; // Prevent updates after cleanup
+        
+        const newLoc = [pos.coords.latitude, pos.coords.longitude];
+        setLocation(newLoc);
+
+        // Clear previous timeout
+        clearTimeout(timeoutId);
+
+        // Debounce and rate limit API calls
+        const now = Date.now();
+        const timeSinceLastFetch = now - lastFetchTime;
+        const delay = Math.max(0, MIN_FETCH_INTERVAL - timeSinceLastFetch);
+
+        timeoutId = setTimeout(async () => {
+          if (!isActive) return; // Prevent API calls after cleanup
+          
+          try {
+            lastFetchTime = Date.now();
+
+            const response = await fetch(
+              `https://nominatim.openstreetmap.org/reverse?format=json&lat=${newLoc[0]}&lon=${newLoc[1]}`,
+              {
+                headers: {
+                  'User-Agent': 'LocationApp/1.0 (contact@yourapp.com)'
+                }
+              }
+            );
+
+            if (!response.ok) {
+              throw new Error(`HTTP error! status: ${response.status}`);
+            }
+
+            const data = await response.json();
+            
+            // Only update state if component is still active
+            if (isActive) {
               setAddress(data?.display_name || "Address not available");
-            })
-            .catch(() => setAddress("Address not available"));
-        },
-        (err) => console.error("Location error:", err),
-        { enableHighAccuracy: true, timeout: 10000 }
-      );
+            }
+
+          } catch (error) {
+            console.error("Reverse geocoding error:", error);
+            if (isActive) {
+              setAddress("Address not available");
+            }
+          }
+        }, delay);
+      },
+      (err) => {
+        console.error("Location error:", err);
+        if (isActive) {
+          setAddress("Location access denied");
+        }
+      },
+      {
+        enableHighAccuracy: true,
+        timeout: 10000,
+        maximumAge: 60000 // Cache location for 1 minute
+      }
+    );
+  } else {
+    console.error("Geolocation is not supported by this browser");
+    setAddress("Geolocation not supported");
+  }
+
+  // Cleanup function
+  return () => {
+    isActive = false; // Prevent any pending state updates
+    if (watchId) {
+      navigator.geolocation.clearWatch(watchId);
     }
-  }, [searchParams]);
+    if (timeoutId) {
+      clearTimeout(timeoutId);
+    }
+  };
+}, [searchParams]); // Consider if searchParams dependency is needed
 
   // ✅ Capture image
   const handleImageChange = (e) => {
